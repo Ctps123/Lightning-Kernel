@@ -2020,6 +2020,7 @@ static void _sde_crtc_blend_setup_mixer(struct drm_crtc *crtc,
 	int zpos_cnt[SDE_STAGE_MAX + 1] = { 0 };
 	int i, rot_id = 0, cnt = 0;
 	bool bg_alpha_enable = false;
+	bool is_video_mode;
 
 	if (!sde_crtc || !crtc->state || !mixer) {
 		SDE_ERROR("invalid sde_crtc or mixer\n");
@@ -2031,12 +2032,13 @@ static void _sde_crtc_blend_setup_mixer(struct drm_crtc *crtc,
 	stage_cfg = &sde_crtc->stage_cfg;
 	cstate = to_sde_crtc_state(crtc->state);
 
-	cstate->sbuf_prefill_line = _sde_crtc_calc_inline_prefill(crtc);
+	is_video_mode = sde_encoder_check_curr_mode(sde_crtc->mixers[0].encoder,
+					       MSM_DISPLAY_CAP_VID_MODE);
+	if (is_video_mode)
+		cstate->sbuf_prefill_line = _sde_crtc_calc_inline_prefill(crtc);
 	sde_crtc->sbuf_rot_id_old = sde_crtc->sbuf_rot_id;
 	sde_crtc->sbuf_rot_id = 0x0;
 	sde_crtc->sbuf_rot_id_delta = 0x0;
-
-	memset(pstates, 0, SDE_PSTATES_MAX * sizeof(struct plane_state));
 
 	drm_atomic_crtc_for_each_plane(plane, crtc) {
 		state = plane->state;
@@ -2052,9 +2054,11 @@ static void _sde_crtc_blend_setup_mixer(struct drm_crtc *crtc,
 		fb = state->fb;
 
 		/* assume all rotated planes report the same prefill amount */
-		prefill = sde_plane_rot_get_prefill(plane);
-		if (prefill)
-			cstate->sbuf_prefill_line = prefill;
+		if (is_video_mode) {
+			prefill = sde_plane_rot_get_prefill(plane);
+			if (prefill)
+				cstate->sbuf_prefill_line = prefill;
+		}
 
 		sde_plane_ctl_flush(plane, ctl, true);
 		rot_id = sde_plane_get_sbuf_id(plane);
@@ -4386,8 +4390,6 @@ void sde_crtc_commit_kickoff(struct drm_crtc *crtc,
 		if (_sde_crtc_commit_kickoff_rot(crtc, cstate))
 			is_error = true;
 
-	sde_vbif_clear_errors(sde_kms);
-
 	if (is_error) {
 		_sde_crtc_remove_pipe_flush(crtc);
 		_sde_crtc_blend_setup(crtc, old_state, false);
@@ -5247,7 +5249,7 @@ static int sde_crtc_atomic_check(struct drm_crtc *crtc,
 {
 	struct drm_device *dev;
 	struct sde_crtc *sde_crtc;
-	struct plane_state pstates[SDE_PSTATES_MAX];
+	struct plane_state pstates[SDE_PSTATES_MAX] __aligned(8);
 	struct sde_crtc_state *cstate;
 	struct sde_kms *kms;
 
@@ -5257,7 +5259,7 @@ static int sde_crtc_atomic_check(struct drm_crtc *crtc,
 
 	int cnt = 0, rc = 0, mixer_width, i, z_pos, mixer_height;
 
-	struct sde_multirect_plane_states multirect_plane[SDE_MULTIRECT_PLANE_MAX];
+	struct sde_multirect_plane_states multirect_plane[SDE_MULTIRECT_PLANE_MAX] __aligned(8);
 	int multirect_count = 0;
 	const struct drm_plane_state *pipe_staged[SSPP_MAX];
 	int left_zpos_cnt = 0, right_zpos_cnt = 0;
@@ -5288,9 +5290,8 @@ static int sde_crtc_atomic_check(struct drm_crtc *crtc,
 		goto end;
 	}
 
-	memset(pstates, 0, SDE_PSTATES_MAX * sizeof(struct plane_state));
-	memset(multirect_plane, 0,
-		   SDE_MULTIRECT_PLANE_MAX * sizeof(struct sde_multirect_plane_states));
+	memset(pstates, 0, sizeof(pstates));
+	memset(multirect_plane, 0, sizeof(multirect_plane));
 
 	mode = &state->adjusted_mode;
 	SDE_DEBUG("%s: check", sde_crtc->name);

@@ -815,6 +815,12 @@ static ssize_t devkmsg_write(struct kiocb *iocb, struct iov_iter *from)
 		}
 	}
 
+	if ((strstr(line, "healthd")) || (strstr(line, "logd")) ||
+		 strstr(line, "dashd")) {
+		kfree(buf);
+		return len;
+	}
+
 	printk_emit(facility, level, NULL, 0, "%s", line);
 	return ret;
 }
@@ -2156,7 +2162,7 @@ int add_preferred_console(char *name, int idx, char *options)
 	return __add_preferred_console(name, idx, options, NULL);
 }
 
-bool console_suspend_enabled = true;
+bool console_suspend_enabled = false;
 EXPORT_SYMBOL(console_suspend_enabled);
 
 static int __init console_suspend_disable(char *str)

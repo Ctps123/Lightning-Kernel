@@ -1403,6 +1403,7 @@ static bool freelist_corrupted(struct kmem_cache *s, struct page *page,
 static inline void *kmalloc_large_node_hook(void *ptr, size_t size, gfp_t flags)
 {
 	ptr = kasan_kmalloc_large(ptr, size, flags);
+	/* As ptr might get tagged, call kmemleak hook after KASAN. */
 	kmemleak_alloc(ptr, size, 1, flags);
 	return ptr;
 }
@@ -1736,13 +1737,8 @@ out:
 
 static struct page *new_slab(struct kmem_cache *s, gfp_t flags, int node)
 {
-	if (unlikely(flags & GFP_SLAB_BUG_MASK)) {
-		gfp_t invalid_mask = flags & GFP_SLAB_BUG_MASK;
-		flags &= ~GFP_SLAB_BUG_MASK;
-		pr_warn("Unexpected gfp: %#x (%pGg). Fixing up to gfp: %#x (%pGg). Fix your code!\n",
-				invalid_mask, &invalid_mask, flags, &flags);
-		dump_stack();
-	}
+	if (unlikely(flags & GFP_SLAB_BUG_MASK))
+		flags = kmalloc_fix_flags(flags);
 
 	return allocate_slab(s,
 		flags & (GFP_RECLAIM_MASK | GFP_CONSTRAINT_MASK), node);
@@ -2527,6 +2523,8 @@ static inline void *new_slab_objects(struct kmem_cache *s, gfp_t flags,
 	void *freelist;
 	struct kmem_cache_cpu *c = *pc;
 	struct page *page;
+
+	WARN_ON_ONCE(s->ctor && (flags & __GFP_ZERO));
 
 	freelist = get_partial(s, flags, node, c);
 

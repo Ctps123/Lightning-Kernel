@@ -90,6 +90,7 @@ void create_kmalloc_caches(unsigned long);
 struct kmem_cache *kmalloc_slab(size_t, gfp_t);
 #endif
 
+gfp_t kmalloc_fix_flags(gfp_t flags);
 
 /* Functions provided by the slab allocators */
 extern int __kmem_cache_create(struct kmem_cache *, unsigned long flags);
@@ -437,6 +438,7 @@ static inline void slab_post_alloc_hook(struct kmem_cache *s, gfp_t flags,
 	flags &= gfp_allowed_mask;
 	for (i = 0; i < size; i++) {
 		p[i] = kasan_slab_alloc(s, p[i], flags);
+		/* As p[i] might get tagged, call kmemleak hook after KASAN. */
 		kmemleak_alloc_recursive(p[i], s->object_size, 1,
 					 s->flags, flags);
 	}

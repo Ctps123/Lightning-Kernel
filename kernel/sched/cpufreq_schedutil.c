@@ -288,6 +288,9 @@ static void sugov_update_commit(struct sugov_policy *sg_policy, u64 time,
 		return;
 	}
 
+	if (sg_policy->next_freq > next_freq)
+		next_freq = (sg_policy->next_freq + next_freq) >> 1;
+
 	sg_policy->next_freq = next_freq;
 	sg_policy->last_freq_update_time = time;
 
@@ -1462,8 +1465,4 @@ struct cpufreq_governor *cpufreq_default_governor(void)
 }
 #endif
 
-static int __init sugov_register(void)
-{
-	return cpufreq_register_governor(&schedutil_gov);
-}
-fs_initcall(sugov_register);
+cpufreq_governor_init(schedutil_gov);
