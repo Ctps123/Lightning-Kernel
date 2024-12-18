@@ -2,11 +2,12 @@
 
 SECONDS=0 # builtin bash timer
 ZIPNAME="Lightning.Kernel_$(TZ=Europe/Istanbul date +"%Y%m%d-%H%M").zip"
-TC_DIR="$HOME/tc/zyc"
+TC_DIR="$HOME/tc/r498229b"
 GCC_64_DIR="$HOME/tc/aarch64-linux-android-4.9"
 GCC_32_DIR="$HOME/tc/arm-linux-androideabi-4.9"
 AK3_DIR="$HOME/android/AnyKernel3"
 DEFCONFIG="vendor/ginkgo-perf_defconfig"
+KSU=false
 
 export PATH="$TC_DIR/bin:$PATH"
 export KBUILD_BUILD_USER="siimsek"
@@ -15,7 +16,7 @@ export KBUILD_BUILD_VERSION="1"
 
 if ! [ -d "${TC_DIR}" ]; then
 echo "Clang not found! Cloning to ${TC_DIR}..."
-if ! git clone --depth=1 https://github.com/magojohnji/ZyCromerZ-Clang.git ${TC_DIR}; then
+if ! git clone --depth=1 https://gitlab.com/prebuilts_clang_host_linux-x86/clang-r498229b.git ${TC_DIR}; then
 echo "Cloning failed! Aborting..."
 exit 1
 fi
@@ -37,14 +38,12 @@ exit 1
 fi
 fi
 
-if [[ $1 = "-r" || $1 = "--regen" ]]; then
-make O=out ARCH=arm64 $DEFCONFIG savedefconfig
-cp out/defconfig arch/arm64/configs/$DEFCONFIG
-exit
-fi
+rm -rf KernelSU && curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
 
-if [[ $1 = "-c" || $1 = "--clean" ]]; then
-rm -rf out
+if [ "$KSU" = true ]; then
+sed -i 's/CONFIG_LOCALVERSION="\(.*\)"/CONFIG_LOCALVERSION="\1-KSU"/' arch/arm64/configs/$DEFCONFIG
+sed -i 's/CONFIG_KSU=n/CONFIG_KSU=y/' arch/arm64/configs/$DEFCONFIG
+ZIPNAME="Lightning.Kernel_$(TZ=Europe/Istanbul date +"%Y%m%d-%H%M")_KSU.zip"
 fi
 
 mkdir -p out
@@ -52,6 +51,8 @@ make O=out ARCH=arm64 $DEFCONFIG
 
 echo -e "\nStarting compilation...\n"
 make -j$(nproc --all) O=out ARCH=arm64 CC=clang LD=ld.lld AR=llvm-ar AS=llvm-as NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip CROSS_COMPILE=$GCC_64_DIR/bin/aarch64-linux-android- CROSS_COMPILE_ARM32=$GCC_32_DIR/bin/arm-linux-androideabi- CLANG_TRIPLE=aarch64-linux-gnu- Image.gz-dtb dtbo.img
+sed -i 's/CONFIG_LOCALVERSION="\(.*\)-KSU"/CONFIG_LOCALVERSION="\1"/' arch/arm64/configs/$DEFCONFIG
+sed -i 's/CONFIG_KSU=y/CONFIG_KSU=n/' arch/arm64/configs/$DEFCONFIG
 
 if [ -f "out/arch/arm64/boot/Image.gz-dtb" ] && [ -f "out/arch/arm64/boot/dtbo.img" ]; then
 echo -e "\nKernel compiled succesfully! Zipping up...\n"
@@ -73,7 +74,7 @@ rm -rf out/arch/arm64/boot
 echo -e "\nCompleted in $((SECONDS / 60)) minute(s) and $((SECONDS % 60)) second(s) !"
 echo "Zip: $ZIPNAME"
 echo "----------------------------------"
-curl -T $ZIPNAME temp.sh | tail -n -1
+rm -rf KernelSU 
 else
 echo -e "\nCompilation failed!"
 exit 1
